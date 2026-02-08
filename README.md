@@ -38,6 +38,16 @@ npm install
 - **Firestore Database**: crea un database in modalità production
 - **Authentication**: abilita il provider "Email/Password"
 
+### 3b. Deploy regole Firestore (obbligatorio per le prenotazioni!)
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase deploy --only firestore
+```
+
+**Senza questo passo le prenotazioni non funzioneranno** (errore "Permesso negato").
+
 ### 4. Deploy delle regole Firestore
 
 ```bash
@@ -46,13 +56,27 @@ firebase login
 firebase deploy --only firestore
 ```
 
-### 5. Avvio in sviluppo
+### 5. (Opzionale) Deploy Cloud Function "Crea cliente"
+
+Per creare i clienti dall’admin (senza usare la Console Firebase):
+
+1. Nel progetto Firebase passa al piano **Blaze** (pay as you go). Le **Cloud Functions** restano nel **free tier** (2M invocazioni/mese gratuite).
+2. Dalla root del progetto:
+   ```bash
+   cd functions
+   npm install
+   cd ..
+   firebase deploy --only functions
+   ```
+3. In Admin → **Crea cliente** potrai inserire email, password e nome attività; l’utente verrà creato in Authentication e il profilo in Firestore.
+
+### 6. Avvio in sviluppo
 
 ```bash
 npm run dev
 ```
 
-### 6. Deploy su Vercel
+### 7. Deploy su Vercel
 
 1. Pusha il codice su GitHub (vedi sotto)
 2. Vai su [vercel.com](https://vercel.com) → **Add New Project** → importa il repo

@@ -19,11 +19,13 @@ import { useAuth } from "@/context/AuthContext";
 import {
   useSlotAvailability,
   useUserBookings,
+  useDisabledDates,
+  useMyBookingLimit,
   bookSlot,
   cancelBooking,
   getUserMonthlyBookingCount,
 } from "@/hooks/useBookings";
-import { SLOTS, MAX_BOOKINGS_PER_MONTH } from "@/config";
+import { SLOTS } from "@/config";
 import type { SlotId } from "@/types";
 
 export function CalendarPage() {
@@ -40,6 +42,8 @@ export function CalendarPage() {
 
   const occupiedSlots = useSlotAvailability(viewStart, viewEnd);
   const userBookings = useUserBookings(user?.uid ?? null);
+  const disabledDates = useDisabledDates();
+  const myBookingLimit = useMyBookingLimit(user?.uid ?? null);
 
   // Calcolo slot occupati dall'utente corrente (per mostrare "Le tue prenotazioni")
   const myBookingsByDate = useMemo(() => {
@@ -63,8 +67,20 @@ export function CalendarPage() {
 
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
+  // Prenotazioni future dell'utente (per la sezione "Le tue prenotazioni")
+  const upcomingBookings = useMemo(() => {
+    const today = format(startOfDay(new Date()), "yyyy-MM-dd");
+    return userBookings
+      .filter((b) => b.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [userBookings]);
+
   const handleBook = async (dateStr: string, slotId: SlotId) => {
     if (!user) return;
+    if (disabledDates.includes(dateStr)) {
+      setMessage({ type: "error", text: "Questo giorno non è prenotabile." });
+      return;
+    }
     setLoading(true);
     setMessage(null);
     try {
@@ -72,10 +88,10 @@ export function CalendarPage() {
         user.uid,
         parseISO(dateStr)
       );
-      if (count >= MAX_BOOKINGS_PER_MONTH) {
+      if (count >= myBookingLimit) {
         setMessage({
           type: "error",
-          text: `Hai già ${MAX_BOOKINGS_PER_MONTH} prenotazioni questo mese.`,
+          text: `Hai già ${myBookingLimit} prenotazioni questo mese (il tuo limite).`,
         });
         setLoading(false);
         return;
@@ -84,9 +100,13 @@ export function CalendarPage() {
       setMessage({ type: "success", text: "Prenotazione effettuata!" });
       loadBookingCount();
     } catch (err) {
+      console.error("Errore prenotazione:", err);
+      const msg = err instanceof Error ? err.message : "Impossibile prenotare. Riprova.";
       setMessage({
         type: "error",
-        text: "Impossibile prenotare. Riprova.",
+        text: msg.includes("permission") || msg.includes("Permission") 
+          ? "Permesso negato. Controlla che le regole Firestore siano deployate." 
+          : msg,
       });
     } finally {
       setLoading(false);
@@ -122,7 +142,7 @@ export function CalendarPage() {
             </span>
             {bookingCount !== null && (
               <span className="text-slate-400 text-xs sm:text-sm whitespace-nowrap">
-                {bookingCount}/{MAX_BOOKINGS_PER_MONTH} prenotazioni
+                {bookingCount}/{myBookingLimit} prenotazioni
               </span>
             )}
             <div className="flex items-center gap-2 sm:gap-3">
@@ -148,6 +168,38 @@ export function CalendarPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 sm:py-8 pb-8 safe-area-padding">
+        {/* Le tue prenotazioni */}
+        {upcomingBookings.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-xl bg-primary-500/10 border border-primary-500/30"
+          >
+            <h3 className="text-sm font-semibold text-primary-300 mb-3">Le tue prenotazioni</h3>
+            <ul className="space-y-2">
+              {upcomingBookings.map((b) => (
+                <li
+                  key={b.docId}
+                  className="flex items-center justify-between gap-4 text-sm"
+                >
+                  <span className="text-white">
+                    {format(parseISO(b.date), "EEEE d MMMM yyyy", { locale: it })} — {SLOTS.find((s) => s.id === b.slotId)?.label}
+                  </span>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleCancel(b.docId)}
+                    disabled={loading}
+                    className="text-xs px-3 py-1 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 disabled:opacity-50"
+                  >
+                    Annulla
+                  </motion.button>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+
         {/* Month navigation */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -177,13 +229,13 @@ export function CalendarPage() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className={`mb-6 px-4 py-3 rounded-lg ${
+              className={`mb-6 px-4 py-4 rounded-xl border-2 ${
                 message.type === "success"
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
-                  : "bg-red-500/20 text-red-300 border border-red-500/50"
-              }`}
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50"
+                  : "bg-red-500/20 text-red-300 border-red-500/50"
+              } border`}
             >
-              {message.text}
+              <p className="font-medium">{message.text}</p>
             </motion.div>
           </AnimatePresence>
         )}
@@ -197,6 +249,7 @@ export function CalendarPage() {
         >
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
+            const isDayDisabled = disabledDates.includes(dateStr);
             const occupied = occupiedSlots[dateStr] ?? {
               morning: false,
               afternoon: false,
@@ -244,6 +297,10 @@ export function CalendarPage() {
                           <span className="text-slate-500 text-xs shrink-0">
                             Passato
                           </span>
+                        ) : isDayDisabled ? (
+                          <span className="text-slate-500 text-xs shrink-0">
+                            Non prenotabile
+                          </span>
                         ) : isMine ? (
                           <motion.button
                             whileHover={{ scale: 1.02 }}
@@ -287,9 +344,10 @@ export function CalendarPage() {
         >
           <h3 className="text-sm font-medium text-slate-300 mb-2">Legenda</h3>
           <ul className="text-sm text-slate-400 space-y-1">
-            <li>• <span className="text-primary-300">Prenota</span> = Slot libero, puoi prenotare</li>
-            <li>• <span className="text-slate-500">Non disponibile</span> = Qualcuno ha già prenotato (in modo anonimo)</li>
-            <li>• <span className="text-amber-300">Annulla</span> = Le tue prenotazioni (max 2 al mese)</li>
+            <li>• <span className="text-primary-300">Prenota</span> = Slot libero</li>
+            <li>• <span className="text-slate-500">Non disponibile</span> = Già prenotato da qualcuno</li>
+            <li>• <span className="text-slate-500">Non prenotabile</span> = Giorno disabilitato dall’admin</li>
+            <li>• <span className="text-amber-300">Annulla</span> = Le tue prenotazioni (limite mensile impostato dal tuo referente)</li>
           </ul>
         </motion.div>
       </main>

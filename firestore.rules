@@ -1,17 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Prenotazioni: chiunque autenticato può leggere (per vedere slot occupati, in forma anonima)
-    // Solo l'utente può creare prenotazioni a proprio nome
-    // Solo l'utente può eliminare le proprie prenotazioni
+    // Helper: true se l'utente è admin (stessa email usata in config.ts)
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'admin@futurecraftmanagement.com';
+    }
+
     match /bookings/{bookingId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null 
+      allow create: if request.auth != null
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'date', 'slotId', 'createdAt']);
-      allow update: if false;
-      allow delete: if request.auth != null 
-        && resource.data.userId == request.auth.uid;
+        && request.resource.data.date is string
+        && request.resource.data.slotId is string;
+      allow update, delete: if request.auth != null
+        && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Profili clienti (nome visualizzato): admin può scrivere, tutti autenticati leggere
+    match /userProfiles/{uid} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Config: giorni disabilitati per prenotazioni
+    match /config/calendar {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
     }
   }
 }

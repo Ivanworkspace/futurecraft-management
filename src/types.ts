@@ -13,3 +13,10 @@ export interface UserProfile {
   email: string;
   isAdmin: boolean;
 }
+
+// Profilo cliente (nome per admin)
+export interface ClientProfile {
+  uid: string;
+  displayName: string;
+  email?: string;
+}
