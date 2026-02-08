@@ -5,8 +5,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { ADMIN_EMAIL } from "@/config";
 import type { UserProfile } from "@/types";
 

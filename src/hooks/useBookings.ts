@@ -11,7 +11,6 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { MAX_BOOKINGS_PER_MONTH } from "@/config";
 import type { Booking, SlotId } from "@/types";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 

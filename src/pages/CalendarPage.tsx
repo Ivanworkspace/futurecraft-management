@@ -29,7 +29,6 @@ import type { SlotId } from "@/types";
 export function CalendarPage() {
   const { user, logout, isAdmin } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [bookingCount, setBookingCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -210,11 +209,7 @@ export function CalendarPage() {
                 layout
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className={`rounded-xl border p-4 transition-all ${
-                  selectedDate && format(selectedDate, "yyyy-MM-dd") === dateStr
-                    ? "border-primary-500 bg-primary-500/10"
-                    : "border-slate-700/50 bg-slate-800/30 hover:border-slate-600"
-                }`}
+                className="rounded-xl border border-slate-700/50 bg-slate-800/30 hover:border-slate-600 p-4 transition-all"
               >
                 <div className="flex items-center justify-between mb-3">
                   <span
