@@ -275,7 +275,10 @@ export function AdminPage() {
     <div className="min-h-screen min-h-[100dvh] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <header className="border-b border-slate-700/50 bg-slate-900/50 backdrop-blur safe-area-padding">
         <div className="max-w-4xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between gap-4">
-          <h1 className="text-lg sm:text-xl font-bold text-white">Pannello Admin</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="" className="h-8 sm:h-9 w-auto object-contain" aria-hidden />
+            <h1 className="text-lg sm:text-xl font-bold text-white">Pannello Admin</h1>
+          </div>
           <div className="flex items-center gap-3">
             <Link to="/" className="text-primary-400 hover:text-primary-300 text-sm font-medium py-2 px-3 -m-2 rounded-lg transition-colors">
               ← Calendario

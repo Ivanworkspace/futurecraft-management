@@ -45,6 +45,7 @@ export function LoginPage() {
       >
         <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-700/50 p-6 sm:p-8">
           <div className="text-center mb-8">
+            <img src="/logo.png" alt="FutureCraft" className="h-16 sm:h-20 mx-auto mb-4 object-contain" />
             <h1 className="text-3xl font-bold text-white tracking-tight">
               FutureCraft
             </h1>
