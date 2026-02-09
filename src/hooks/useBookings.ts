@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   collection,
   query,
@@ -9,6 +9,7 @@ import {
   doc,
   getDocs,
   getDoc,
+  getDocFromServer,
   setDoc,
   updateDoc,
   Timestamp,
@@ -236,8 +237,10 @@ export function useUserProfilesMap(isAdmin: boolean) {
 /** Limite prenotazioni al mese per l'utente corrente (per clienti nel calendario) */
 export function useMyBookingLimit(userId: string | null) {
   const [limit, setLimit] = useState<number>(MAX_BOOKINGS_PER_MONTH);
+  const hasReceivedValue = useRef(false);
 
   useEffect(() => {
+    hasReceivedValue.current = false;
     if (!userId) {
       setLimit(MAX_BOOKINGS_PER_MONTH);
       return;
@@ -247,9 +250,13 @@ export function useMyBookingLimit(userId: string | null) {
       ref,
       (snapshot) => {
         const n = snapshot.data()?.maxBookingsPerMonth;
-        setLimit(n != null && n >= 1 ? Number(n) : MAX_BOOKINGS_PER_MONTH);
+        const value = n != null && n >= 1 ? Number(n) : MAX_BOOKINGS_PER_MONTH;
+        hasReceivedValue.current = true;
+        setLimit(value);
       },
-      () => setLimit(MAX_BOOKINGS_PER_MONTH)
+      () => {
+        if (!hasReceivedValue.current) setLimit(MAX_BOOKINGS_PER_MONTH);
+      }
     );
     return () => unsubscribe();
   }, [userId]);
@@ -271,7 +278,7 @@ export async function saveUserProfile(
   await setDoc(doc(db, USER_PROFILES_COLLECTION, uid), payload, { merge: true });
 }
 
-// --- Giorni disabilitati ---
+// --- Giorni / slot disabilitati ---
 export function useDisabledDates() {
   const [dates, setDates] = useState<string[]>([]);
 
@@ -294,8 +301,36 @@ export function useDisabledDates() {
   return dates;
 }
 
+export type DisabledSlot = { date: string; slotId: string };
+
+export function useDisabledSlots() {
+  const [slots, setSlots] = useState<DisabledSlot[]>([]);
+
+  useEffect(() => {
+    const ref = doc(db, "config", "calendar");
+    const unsubscribe = onSnapshot(
+      ref,
+      (snapshot) => {
+        const list = (snapshot.data()?.disabledSlots as DisabledSlot[] | undefined) || [];
+        setSlots(Array.isArray(list) ? list : []);
+      },
+      (err) => {
+        console.warn("useDisabledSlots:", err?.message || err);
+        setSlots([]);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  return slots;
+}
+
 export async function setDisabledDates(dates: string[]): Promise<void> {
   await setDoc(doc(db, "config", "calendar"), { disabledDates: dates }, { merge: true });
+}
+
+export async function setDisabledSlots(slots: DisabledSlot[]): Promise<void> {
+  await setDoc(doc(db, "config", "calendar"), { disabledSlots: slots }, { merge: true });
 }
 
 // --- Clienti (solo Firestore: email, nome, max incontri) ---
@@ -368,16 +403,27 @@ export async function deleteClient(clientId: string): Promise<void> {
   await deleteDoc(doc(db, CLIENTS_COLLECTION, clientId));
 }
 
-/** Al login: se esiste un client con questa email, copia sempre in userProfiles (così il limite aggiornato dall'admin vale) */
+/** Al login: se esiste un client con questa email, copia sempre in userProfiles (così il limite aggiornato dall'admin vale).
+ * Usa getDocFromServer per evitare cache: una lettura da cache potrebbe avere maxBookingsPerMonth vecchio (es. 2) e sovrascrivere il valore corretto (es. 4). */
 export async function syncClientToUserProfile(uid: string, email: string | null): Promise<void> {
-  if (!email) return;
-  const id = clientIdFromEmail(email);
-  const clientSnap = await getDoc(doc(db, CLIENTS_COLLECTION, id));
+  if (!email || !email.trim()) return;
+  const emailNorm = email.trim().toLowerCase();
+  const id = clientIdFromEmail(emailNorm);
+  const clientRef = doc(db, CLIENTS_COLLECTION, id);
+  let clientSnap;
+  try {
+    clientSnap = await getDocFromServer(clientRef);
+  } catch {
+    clientSnap = await getDoc(clientRef);
+  }
   if (!clientSnap.exists()) return;
   const d = clientSnap.data();
+  const max = d.maxBookingsPerMonth != null && Number(d.maxBookingsPerMonth) >= 1
+    ? Math.min(31, Math.max(1, Number(d.maxBookingsPerMonth)))
+    : 2;
   await setDoc(doc(db, USER_PROFILES_COLLECTION, uid), {
-    displayName: d.displayName || "",
-    email: d.email || email,
-    maxBookingsPerMonth: d.maxBookingsPerMonth != null ? d.maxBookingsPerMonth : 2,
+    displayName: (d.displayName != null && d.displayName !== "") ? String(d.displayName).trim() : "",
+    email: (d.email != null && d.email !== "") ? String(d.email).trim().toLowerCase() : emailNorm,
+    maxBookingsPerMonth: max,
   }, { merge: true });
 }

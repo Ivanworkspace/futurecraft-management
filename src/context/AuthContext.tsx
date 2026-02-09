@@ -28,7 +28,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
       if (firebaseUser) {
         const isAdmin = firebaseUser.email === ADMIN_EMAIL;
         setUserProfile({
@@ -36,8 +35,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email || "",
           isAdmin,
         });
-        syncClientToUserProfile(firebaseUser.uid, firebaseUser.email || null).catch(() => {});
+        // Attendi la sync da Clienti → userProfiles così il limite (es. 4 incontri) è già applicato prima che il calendario legga
+        await syncClientToUserProfile(firebaseUser.uid, firebaseUser.email || null).catch(() => {});
+        setUser(firebaseUser);
       } else {
+        setUser(null);
         setUserProfile(null);
       }
       setLoading(false);

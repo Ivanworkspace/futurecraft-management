@@ -19,11 +19,13 @@ import {
   useAllBookings,
   useUserProfilesMap,
   useDisabledDates,
+  useDisabledSlots,
   useClients,
   addClient,
   updateClient,
   deleteClient,
   setDisabledDates,
+  setDisabledSlots,
   updateBooking,
   adminDeleteBooking,
 } from "@/hooks/useBookings";
@@ -39,6 +41,7 @@ export function AdminPage() {
   const bookings = useAllBookings(isAdmin);
   const profilesMap = useUserProfilesMap(isAdmin);
   const disabledDates = useDisabledDates();
+  const disabledSlots = useDisabledSlots();
   const clients = useClients(isAdmin);
 
   const [activeTab, setActiveTab] = useState<Tab>("prenotazioni");
@@ -46,6 +49,7 @@ export function AdminPage() {
   const [editDate, setEditDate] = useState("");
   const [editSlot, setEditSlot] = useState<SlotId>("morning");
   const [newDisabledDate, setNewDisabledDate] = useState("");
+  const [newDisabledScope, setNewDisabledScope] = useState<"day" | SlotId>("day");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Form Clienti (unica sezione)
@@ -131,17 +135,26 @@ export function AdminPage() {
     }
   };
 
-  const handleAddDisabledDate = async () => {
+  const handleAddDisabled = async () => {
     if (!newDisabledDate.trim()) return;
     const dateStr = format(parseISO(newDisabledDate), "yyyy-MM-dd");
-    if (disabledDates.includes(dateStr)) {
-      setMessage({ type: "error", text: "Data già disabilitata." });
-      return;
-    }
     setMessage(null);
     try {
-      await setDisabledDates([...disabledDates, dateStr].sort());
-      setMessage({ type: "success", text: "Giorno disabilitato." });
+      if (newDisabledScope === "day") {
+        if (disabledDates.includes(dateStr)) {
+          setMessage({ type: "error", text: "Questo giorno è già disabilitato." });
+          return;
+        }
+        await setDisabledDates([...disabledDates, dateStr].sort());
+        setMessage({ type: "success", text: "Giorno disabilitato." });
+      } else {
+        if (disabledSlots.some((s) => s.date === dateStr && s.slotId === newDisabledScope)) {
+          setMessage({ type: "error", text: "Questo incontro è già disabilitato." });
+          return;
+        }
+        await setDisabledSlots([...disabledSlots, { date: dateStr, slotId: newDisabledScope }]);
+        setMessage({ type: "success", text: "Incontro disabilitato." });
+      }
       setNewDisabledDate("");
     } catch (err) {
       setMessage({ type: "error", text: "Errore. Riprova." });
@@ -153,6 +166,16 @@ export function AdminPage() {
     try {
       await setDisabledDates(disabledDates.filter((d) => d !== dateStr));
       setMessage({ type: "success", text: "Giorno riattivato." });
+    } catch (err) {
+      setMessage({ type: "error", text: "Errore. Riprova." });
+    }
+  };
+
+  const handleRemoveDisabledSlot = async (dateStr: string, slotId: string) => {
+    setMessage(null);
+    try {
+      await setDisabledSlots(disabledSlots.filter((s) => !(s.date === dateStr && s.slotId === slotId)));
+      setMessage({ type: "success", text: "Incontro riattivato." });
     } catch (err) {
       setMessage({ type: "error", text: "Errore. Riprova." });
     }
@@ -391,24 +414,47 @@ export function AdminPage() {
         )}
 
         {activeTab === "giorni" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <h2 className="text-lg font-semibold text-white">Giorni senza prenotazioni</h2>
-            <p className="text-slate-400 text-sm">In questi giorni i clienti non potranno prenotare.</p>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <h2 className="text-lg font-semibold text-white">Giorni e incontri disabilitati</h2>
+            <p className="text-slate-400 text-sm">Disabilita un intero giorno o solo un incontro (mattina o pomeriggio).</p>
             <div className="flex flex-wrap gap-2 items-center">
               <input type="date" value={newDisabledDate} onChange={(e) => setNewDisabledDate(e.target.value)} className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white" />
-              <button onClick={handleAddDisabledDate} className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium">Aggiungi giorno</button>
-            </div>
-            {disabledDates.length > 0 ? (
-              <ul className="space-y-2">
-                {disabledDates.map((d) => (
-                  <li key={d} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                    <span className="text-white">{format(parseISO(d), "d MMMM yyyy", { locale: it })}</span>
-                    <button onClick={() => handleRemoveDisabledDate(d)} className="text-red-400 hover:text-red-300 text-sm">Riattiva</button>
-                  </li>
+              <select value={newDisabledScope} onChange={(e) => setNewDisabledScope(e.target.value as "day" | SlotId)} className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white">
+                <option value="day">Tutto il giorno</option>
+                {SLOTS.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
-              </ul>
-            ) : (
-              <p className="text-slate-500 text-sm">Nessun giorno disabilitato.</p>
+              </select>
+              <button onClick={handleAddDisabled} className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium">Aggiungi</button>
+            </div>
+            {disabledDates.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-slate-300 mb-2">Giorni interi disabilitati</h3>
+                <ul className="space-y-2">
+                  {disabledDates.map((d) => (
+                    <li key={d} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                      <span className="text-white">{format(parseISO(d), "d MMMM yyyy", { locale: it })} — Tutto il giorno</span>
+                      <button onClick={() => handleRemoveDisabledDate(d)} className="text-red-400 hover:text-red-300 text-sm">Riattiva</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {disabledSlots.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-slate-300 mb-2">Singoli incontri disabilitati</h3>
+                <ul className="space-y-2">
+                  {disabledSlots.map((s) => (
+                    <li key={`${s.date}-${s.slotId}`} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                      <span className="text-white">{format(parseISO(s.date), "d MMMM yyyy", { locale: it })} — {SLOTS.find((x) => x.id === s.slotId)?.label ?? s.slotId}</span>
+                      <button onClick={() => handleRemoveDisabledSlot(s.date, s.slotId)} className="text-red-400 hover:text-red-300 text-sm">Riattiva</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {disabledDates.length === 0 && disabledSlots.length === 0 && (
+              <p className="text-slate-500 text-sm">Nessun giorno o incontro disabilitato.</p>
             )}
           </motion.div>
         )}

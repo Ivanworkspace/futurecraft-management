@@ -20,11 +20,11 @@ import {
   useSlotAvailability,
   useUserBookings,
   useDisabledDates,
+  useDisabledSlots,
   useMyBookingLimit,
   bookSlot,
   cancelBooking,
   getUserMonthlyBookingCount,
-  syncClientToUserProfile,
 } from "@/hooks/useBookings";
 import { SLOTS } from "@/config";
 import type { SlotId } from "@/types";
@@ -44,6 +44,7 @@ export function CalendarPage() {
   const occupiedSlots = useSlotAvailability(viewStart, viewEnd);
   const userBookings = useUserBookings(user?.uid ?? null);
   const disabledDates = useDisabledDates();
+  const disabledSlots = useDisabledSlots();
   const myBookingLimit = useMyBookingLimit(user?.uid ?? null);
 
   // Calcolo slot occupati dall'utente corrente (per mostrare "Le tue prenotazioni")
@@ -66,13 +67,6 @@ export function CalendarPage() {
     loadBookingCount();
   }, [user?.uid, currentMonth]);
 
-  // Re-sync limite da Clienti (admin) a userProfile, così il limite aggiornato vale senza logout
-  useEffect(() => {
-    if (user?.uid && user?.email && !isAdmin) {
-      syncClientToUserProfile(user.uid, user.email).catch(() => {});
-    }
-  }, [user?.uid, user?.email, isAdmin]);
-
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   // Prenotazioni future dell'utente (per la sezione "Le tue prenotazioni")
@@ -83,10 +77,14 @@ export function CalendarPage() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [userBookings]);
 
+  const isSlotDisabled = (dateStr: string, slotId: string) =>
+    disabledDates.includes(dateStr) ||
+    disabledSlots.some((s) => s.date === dateStr && s.slotId === slotId);
+
   const handleBook = async (dateStr: string, slotId: SlotId) => {
     if (!user) return;
-    if (disabledDates.includes(dateStr)) {
-      setMessage({ type: "error", text: "Questo giorno non è prenotabile." });
+    if (isSlotDisabled(dateStr, slotId)) {
+      setMessage({ type: "error", text: "Questo incontro non è prenotabile." });
       return;
     }
     setLoading(true);
@@ -257,7 +255,6 @@ export function CalendarPage() {
         >
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
-            const isDayDisabled = disabledDates.includes(dateStr);
             const occupied = occupiedSlots[dateStr] ?? {
               morning: false,
               afternoon: false,
@@ -292,6 +289,7 @@ export function CalendarPage() {
                     const isOccupied = occupied[slot.id];
                     const isMine = myBooking?.[slot.id];
                     const isPast = isBefore(day, startOfDay(new Date()));
+                    const slotDisabled = isSlotDisabled(dateStr, slot.id);
 
                     return (
                       <div
@@ -305,7 +303,7 @@ export function CalendarPage() {
                           <span className="text-slate-500 text-xs shrink-0">
                             Passato
                           </span>
-                        ) : isDayDisabled ? (
+                        ) : slotDisabled ? (
                           <span className="text-slate-500 text-xs shrink-0">
                             Non prenotabile
                           </span>
