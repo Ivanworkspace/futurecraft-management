@@ -24,6 +24,7 @@ import {
   bookSlot,
   cancelBooking,
   getUserMonthlyBookingCount,
+  syncClientToUserProfile,
 } from "@/hooks/useBookings";
 import { SLOTS } from "@/config";
 import type { SlotId } from "@/types";
@@ -65,6 +66,13 @@ export function CalendarPage() {
     loadBookingCount();
   }, [user?.uid, currentMonth]);
 
+  // Re-sync limite da Clienti (admin) a userProfile, così il limite aggiornato vale senza logout
+  useEffect(() => {
+    if (user?.uid && user?.email && !isAdmin) {
+      syncClientToUserProfile(user.uid, user.email).catch(() => {});
+    }
+  }, [user?.uid, user?.email, isAdmin]);
+
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   // Prenotazioni future dell'utente (per la sezione "Le tue prenotazioni")
@@ -96,7 +104,7 @@ export function CalendarPage() {
         setLoading(false);
         return;
       }
-      await bookSlot(user.uid, dateStr, slotId);
+      await bookSlot(user.uid, user.email ?? null, dateStr, slotId);
       setMessage({ type: "success", text: "Prenotazione effettuata!" });
       loadBookingCount();
     } catch (err) {

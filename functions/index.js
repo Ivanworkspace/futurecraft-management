@@ -18,7 +18,8 @@ export const createClientUser = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Devi essere loggato.");
     }
-    if (request.auth.token.email !== ADMIN_EMAIL) {
+    const adminEmail = (request.auth.token.email || "").toLowerCase();
+    if (adminEmail !== ADMIN_EMAIL.toLowerCase()) {
       throw new HttpsError("permission-denied", "Solo l'admin può creare clienti.");
     }
 
@@ -26,7 +27,9 @@ export const createClientUser = onCall(
     if (!email || typeof email !== "string" || !email.trim()) {
       throw new HttpsError("invalid-argument", "Email obbligatoria.");
     }
-    if (!password || typeof password !== "string" || password.length < 6) {
+    const emailNormalized = email.trim().toLowerCase();
+    const passwordTrimmed = typeof password === "string" ? password.trim() : "";
+    if (!passwordTrimmed || passwordTrimmed.length < 6) {
       throw new HttpsError("invalid-argument", "Password obbligatoria (min 6 caratteri).");
     }
 
@@ -36,8 +39,8 @@ export const createClientUser = onCall(
     let userRecord;
     try {
       userRecord = await auth.createUser({
-        email: email.trim(),
-        password,
+        email: emailNormalized,
+        password: passwordTrimmed,
         displayName: displayName && String(displayName).trim() ? String(displayName).trim() : undefined,
       });
     } catch (err) {
@@ -61,7 +64,7 @@ export const createClientUser = onCall(
     await db.collection("userProfiles").doc(uid).set(
       {
         displayName: displayName && String(displayName).trim() ? String(displayName).trim() : "",
-        email: email.trim(),
+        email: emailNormalized,
         maxBookingsPerMonth: max,
       },
       { merge: true }
@@ -69,7 +72,7 @@ export const createClientUser = onCall(
 
     return {
       uid,
-      email: email.trim(),
+      email: emailNormalized,
       message: "Cliente creato. Comunica email e password al cliente per l'accesso.",
     };
   }

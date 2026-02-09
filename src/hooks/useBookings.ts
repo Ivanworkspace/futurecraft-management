@@ -8,6 +8,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  getDoc,
   setDoc,
   updateDoc,
   Timestamp,
@@ -19,6 +20,12 @@ import { startOfMonth, endOfMonth, format } from "date-fns";
 
 const BOOKINGS_COLLECTION = "bookings";
 const USER_PROFILES_COLLECTION = "userProfiles";
+const CLIENTS_COLLECTION = "clients";
+
+/** Id documento Firestore per email (niente @ o .) */
+function clientIdFromEmail(email: string): string {
+  return email.trim().toLowerCase().replace(/@/g, "_at_").replace(/\./g, "_");
+}
 
 // Restituisce se uno slot è occupato (anonimo - non mostra chi)
 export function useSlotAvailability(startDate: Date, endDate: Date) {
@@ -77,14 +84,16 @@ export async function getUserMonthlyBookingCount(
   ).length;
 }
 
-// Prenota uno slot
+// Prenota uno slot (userEmail serve all'admin per mostrare il nome)
 export async function bookSlot(
   userId: string,
+  userEmail: string | null,
   date: string,
   slotId: SlotId
 ): Promise<void> {
   await addDoc(collection(db, BOOKINGS_COLLECTION), {
     userId,
+    userEmail: userEmail || null,
     date,
     slotId,
     createdAt: Timestamp.now(),
@@ -287,4 +296,88 @@ export function useDisabledDates() {
 
 export async function setDisabledDates(dates: string[]): Promise<void> {
   await setDoc(doc(db, "config", "calendar"), { disabledDates: dates }, { merge: true });
+}
+
+// --- Clienti (solo Firestore: email, nome, max incontri) ---
+export interface ClientRecord {
+  id: string;
+  email: string;
+  displayName: string;
+  maxBookingsPerMonth: number;
+}
+
+export function useClients(isAdmin: boolean) {
+  const [clients, setClients] = useState<ClientRecord[]>([]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setClients([]);
+      return;
+    }
+    const q = collection(db, CLIENTS_COLLECTION);
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            email: (data.email as string) || "",
+            displayName: (data.displayName as string) || "",
+            maxBookingsPerMonth: data.maxBookingsPerMonth != null ? Number(data.maxBookingsPerMonth) : 2,
+          };
+        });
+        setClients(list);
+      },
+      (err) => {
+        console.warn("useClients:", err?.message || err);
+        setClients([]);
+      }
+    );
+    return () => unsubscribe();
+  }, [isAdmin]);
+
+  return clients;
+}
+
+export async function addClient(data: {
+  email: string;
+  displayName: string;
+  maxBookingsPerMonth: number;
+}): Promise<void> {
+  const id = clientIdFromEmail(data.email);
+  if (!id) throw new Error("Email non valida");
+  await setDoc(doc(db, CLIENTS_COLLECTION, id), {
+    email: data.email.trim().toLowerCase(),
+    displayName: data.displayName.trim(),
+    maxBookingsPerMonth: Math.max(1, Math.min(31, data.maxBookingsPerMonth)),
+  }, { merge: true });
+}
+
+export async function updateClient(
+  clientId: string,
+  data: { displayName: string; maxBookingsPerMonth: number }
+): Promise<void> {
+  await updateDoc(doc(db, CLIENTS_COLLECTION, clientId), {
+    displayName: data.displayName.trim(),
+    maxBookingsPerMonth: Math.max(1, Math.min(31, data.maxBookingsPerMonth)),
+  });
+}
+
+export async function deleteClient(clientId: string): Promise<void> {
+  await deleteDoc(doc(db, CLIENTS_COLLECTION, clientId));
+}
+
+/** Al login: se esiste un client con questa email, copia sempre in userProfiles (così il limite aggiornato dall'admin vale) */
+export async function syncClientToUserProfile(uid: string, email: string | null): Promise<void> {
+  if (!email) return;
+  const id = clientIdFromEmail(email);
+  const clientSnap = await getDoc(doc(db, CLIENTS_COLLECTION, id));
+  if (!clientSnap.exists()) return;
+  const d = clientSnap.data();
+  await setDoc(doc(db, USER_PROFILES_COLLECTION, uid), {
+    displayName: d.displayName || "",
+    email: d.email || email,
+    maxBookingsPerMonth: d.maxBookingsPerMonth != null ? d.maxBookingsPerMonth : 2,
+  }, { merge: true });
 }

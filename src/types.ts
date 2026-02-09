@@ -5,6 +5,7 @@ export interface Booking {
   date: string; // YYYY-MM-DD
   slotId: SlotId;
   userId: string;
+  userEmail?: string | null;
   createdAt: string;
 }
 

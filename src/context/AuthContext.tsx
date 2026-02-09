@@ -6,6 +6,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { syncClientToUserProfile } from "@/hooks/useBookings";
 import { ADMIN_EMAIL } from "@/config";
 import type { UserProfile } from "@/types";
 
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email || "",
           isAdmin,
         });
+        syncClientToUserProfile(firebaseUser.uid, firebaseUser.email || null).catch(() => {});
       } else {
         setUserProfile(null);
       }
@@ -44,7 +46,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const emailNorm = (email || "").trim().toLowerCase();
+    const passwordNorm = typeof password === "string" ? password.trim() : "";
+    await signInWithEmailAndPassword(auth, emailNorm, passwordNorm);
   };
 
   const logout = async () => {

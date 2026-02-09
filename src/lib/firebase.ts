@@ -16,6 +16,8 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Usa la stessa regione dove hai fatto deploy della funzione (europe-west1)
 const functions = getFunctions(app, "europe-west1");
-export const createClientUserCallable = httpsCallable<{ email: string; password: string; displayName?: string; maxBookingsPerMonth?: number }, { uid: string; email: string; message: string }>(functions, "createClientUser");
+export const createClientUserCallable = httpsCallable<
+  { email: string; password: string; displayName: string; maxBookingsPerMonth: number },
+  { uid: string; email: string; message: string }
+>(functions, "createClientUser");

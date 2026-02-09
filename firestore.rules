@@ -11,7 +11,8 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.date is string
-        && request.resource.data.slotId is string;
+        && request.resource.data.slotId is string
+        && (request.resource.data.userEmail == null || request.resource.data.userEmail == request.auth.token.email);
       allow update, delete: if request.auth != null
         && (resource.data.userId == request.auth.uid || isAdmin());
     }
@@ -24,6 +25,12 @@ service cloud.firestore {
 
     // Config: giorni disabilitati per prenotazioni
     match /config/calendar {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Clienti (email, nome, max incontri) - solo admin scrive, tutti autenticati leggono (per sync al login)
+    match /clients/{clientId} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
